@@ -1,30 +1,49 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
 ---
+
+```{r}
+setwd('~/Documentos/DataMining/dm-uba.github.io-master/2021/tps_entregables/TP012021/')
+```
+```{r include = FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+```
+
 *Imports*
 
 ```{r}
 library(mongolite)
 library(modeest)
+library(jsonlite)
+library(dplyr)
 ```
 
 *Carga datasets*
 
-```{r}
-artistas = mongo(db = "DMUBA_SPOTIFY", collection = 'artist')
-artist <- artistas$find('{}')
+```{r results="hide"}
+#artistas = mongo(db = "DMUBA_SPOTIFY", collection = 'artist')
+#artist <- artistas$find('{}')
 
-chart = mongo(db = "DMUBA_SPOTIFY", collection = 'charts')
-charts <- chart$find('{}')
+#chart = mongo(db = "DMUBA_SPOTIFY", collection = 'charts')
+#charts <- chart$find('{}')
 
-#artista_audio_features = mongo(db = "DMUBA_SPOTIFY", collection = 'artist_audio_features')
+#artista_audio_features = mongo(db = "DMUBA_SPOTIFY", collection ='artist_audio_features_solo')
 #artist_audio_features <- artista_audio_features$find('{}')
+
+artist = stream_in(file("~/Documentos/DataMining/dm-uba.github.io-master/2021/tps_entregables/TP012021/datasets/artist-dm.json",open="r"))
+charts= stream_in(file("~/Documentos/DataMining/dm-uba.github.io-master/2021/tps_entregables/TP012021/datasets/charts-dm.json",open="r"))
+artist_audio_features = stream_in(file("~/Documentos/DataMining/dm-uba.github.io-master/2021/tps_entregables/TP012021/datasets/artist_audio_features_solo_art-dm.json",open="r"))
+
 ```
 
 *Atributos*
 
-Artista:
+-Artista:
 
 ```{r}
 # Nombres columnas
@@ -32,20 +51,25 @@ names(artist)
 # Tamaño dataframe
 dim(artist)
 ```
+
 ```{r}
 aux <- unique(artist)
 head(aux,5)
 ```
+
 No hay artistas repetidos en Artist:
+
 ```{r}
 dim(aux)
 ```
-No hay missings en Artist
+
+No hay missings en Artist:
+
 ```{r}
 colSums(is.na(artist))  
 ```
 
-Charts
+-Charts
 
 ```{r}
 # Nombres columnas
@@ -53,78 +77,370 @@ names(charts)
 # Tamaño dataframe
 dim(charts)
 ```
-*Summary*
 
-Streams
+No hay missings en charts:
 
 ```{r}
-summary(charts$Streams)
+colSums(is.na(charts))  
 ```
-Cantidad de datos por año
+
+Cantidad de datos por año en charts:
 
 ```{r}
 date <- format(as.Date(charts$week_start, format="%Y-%m-%d"),"%Y")
 table(date)
 ```
-Cantidad de tracks por artista
+
+Hacemos unique de charts para ver si hay repetidos:
 
 ```{r}
-trackxartist <- aggregate(Track_Name ~Artist, data=charts, FUN=length)
-trackxartist<-trackxartist[order(-trackxartist$Track_Name),]
-trackxartist
+dim(charts)
+dim(unique(charts))
 ```
+
+Hay filas que son la misma pero tienen distinto identificador.
+Ahora en cada subconjunto vemos si hay repetidos:
+
+```{r}
+subconjunto_charts0 <- charts[,c(2:8)]
+# creo columna adicional que extrae el ago
+subconjunto_charts0$agno <- format(as.Date(charts$week_start, format="%Y-%m-%d"),"%Y")
+```
+
+agno 2018:
+
+```{r}
+subconjunto_charts_2018 <- subconjunto_charts0[subconjunto_charts0$agno=='2018',]
+aux1<-unique(subconjunto_charts_2018)
+aux1<-aux1[order(aux1$Artist),]
+```
+
+```{r}
+dim(aux1)
+dim(unique(aux1))
+```
+
+agno 2019:
+
+```{r}
+subconjunto_charts_2019 <- subconjunto_charts0[subconjunto_charts0$agno=='2019',]
+aux2<-unique(subconjunto_charts_2019)
+aux2<-aux2[order(aux2$Artist),]
+```
+
+```{r}
+dim(aux2)
+dim(unique(aux2))
+```
+
+agno 2020:
+
+```{r}
+subconjunto_charts_2020 <- subconjunto_charts0[subconjunto_charts0$agno=='2020',]
+aux3<-unique(subconjunto_charts_2020)
+aux3<-aux3[order(aux3$Artist),]
+```
+
+```{r}
+dim(aux3)
+dim(unique(aux3))
+```
+
+agno 2021:
+
+```{r}
+subconjunto_charts_2021 <- subconjunto_charts0[subconjunto_charts0$agno=='2021',]
+aux4<-unique(subconjunto_charts_2021)
+aux4<-aux4[order(aux4$Artist),]
+```
+
+```{r}
+dim(aux4)
+dim(unique(aux4))
+```
+
+Confirmamos que ya no hay repetidos si hacemos unique de charts sin identificador.
+
+```{r}
+sub_charts <-unique(subconjunto_charts0)
+```
+
+
+- *Tracks*
+
+Cantidad de tracks por artista ordenados de mas tracks a menos (se puede hacer por agno tambien con los subconjuntos de mas arriba):
+
+```{r}
+trackxartist <- aggregate(Track_Name ~Artist, data=sub_charts, FUN=length)
+colnames(trackxartist) <- c("Artist","Cantidad_tracks")
+trackxartist<-trackxartist[order(-trackxartist$Cantidad_tracks),]
+head(trackxartist,5)
+```
+Post Malone y Billie Eilish tienen mas tracks en los listados en total.
 ```{r}
 summary(trackxartist)
 ```
-```{r}
-hist(trackxartist$Track_Name, xlab = "Tracks", ylab = "Freq", 
+Del histograma podemos ver que las medidas de tendencia central son representativas:
+
+```{r fig.height=3, fig.width=4}
+hist(trackxartist$Cantidad_tracks, xlab = "Tracks", ylab = "Freq", 
         main="Cantidad de tracks por artista",breaks=100) 
 ```
 
-No hay missings en charts
-```{r}
-colSums(is.na(charts))  
-```
+La dimension de tracks por artista debe ser la cantidad de artistas:
+
 ```{r}
 dim(trackxartist)
 ```
-pero hay un artista mas en esta tabla... es una fila de un track que aparece cuatro veces sin artista...
 
-Cantidad media de streams por artista (totales, se podria hacer por año)
+Discriminando por agno:
+
+-2018
+```{r}
+trackxartist_2018 <- aggregate(Track_Name ~Artist, data=aux1, FUN=length)
+colnames(trackxartist_2018) <- c("Artist","Cantidad_tracks")
+trackxartist_2018<-trackxartist_2018[order(-trackxartist_2018$Cantidad_tracks),]
+head(trackxartist_2018,10)
+```
+
+-2019
 
 ```{r}
-streamsxartist <- aggregate(Streams ~charts$Artist, data=charts, FUN=mean)
-streamsxartist<-streamsxartist[order(-streamsxartist$Streams),]
-streamsxartist
+trackxartist_2019 <- aggregate(Track_Name ~Artist, data=aux2, FUN=length)
+colnames(trackxartist_2019) <- c("Artist","Cantidad_tracks")
+trackxartist_2019<-trackxartist_2019[order(-trackxartist_2019$Cantidad_tracks),]
+head(trackxartist_2019,10)
 ```
+
+-2020
+
+```{r}
+trackxartist_2020 <- aggregate(Track_Name ~Artist, data=aux3, FUN=length)
+colnames(trackxartist_2020) <- c("Artist","Cantidad_tracks")
+trackxartist_2020 <- trackxartist_2020[order(-trackxartist_2020$Cantidad_tracks),]
+head(trackxartist_2020,10)
+```
+
+-2021
+
+```{r}
+trackxartist_2021 <- aggregate(Track_Name ~Artist, data=aux4, FUN=length)
+colnames(trackxartist_2021) <- c("Artist","Cantidad_tracks")
+trackxartist_2021 <- trackxartist_2021[order(-trackxartist_2021$Cantidad_tracks),]
+head(trackxartist_2021,10)
+```
+
+Si tenemos en cuenta los 5 primeros lugares, Post Malone tuvo mas tracks en la lista por tres agnos seguidos, asi como Ed Sheeran. Billie Eilish va por ese camino. XXXTentation, Juice y Bad Bunny siguen con dos agnos seguidos de tener mas tracks en las listas. XXXTentation fue popular en cuanto a numero de tracks durante 2018 y 2019 pero despues ya no estuvo entre los primeros 5.
+
+- *Streams*
+
+```{r}
+summary(sub_charts$Streams)
+```
+
+El 50% de las reproducciones estan por debajo del orden de las ~6,53 millones de reproducciones y el maximo de reproducciones es del orden de ~71,47 millones de reproducciones. Del histograma podemos ver que las medidas de tendencia central no son representativas, parece ser una distribucion bimodal (?):
+
+```{r fig.height=3, fig.width=3}
+hist(log(sub_charts$Streams), xlab = "Log(streams)", ylab = "Freq", 
+        main="Cantidad total de reproducciones",breaks=50) 
+```
+```{r fig.height=3, fig.width=4}
+boxplot(sub_charts$Streams,ylab = "Valores", xlab = "Streams",main="Reproducciones de tracks")
+```
+Las medidas centrales no son representativas, en el boxplot se visualizan muchos outliers.
+
+Por agno:
+
+```{r fig.height=3, fig.width=4}
+data <- sub_charts[c(4,8)]
+mutate(data,agno=as.numeric(data$agno)) -> data
+boxplot(data$Streams ~data$agno, ylab = "Streams", xlab = "Año",main="Reproducciones de tracks")
+```
+Las distribuciones discriminadas por agno tambien son muy asimetricas y con muchos outliers.
+
+Cantidad media de streams por artista (totales, se podria hacer por año con los subconjuntos hechos mas arriba):
+
+```{r}
+streamsxartist <- aggregate(Streams ~Artist, data=sub_charts, FUN=mean)
+streamsxartist<-streamsxartist[order(-streamsxartist$Streams),]
+head(streamsxartist,10)
+```
+
+Se meten artistas antiguos en el ranking de popularidad por reproducciones.
 
 ```{r}
 summary(streamsxartist)
 ```
 
-```{r}
-hist(streamsxartist$Streams, xlab = "streams", ylab = "Freq", 
-        main="Cantidad de reproducciones", breaks=50) 
-```
-Canciones top
+El 50% de los artistas tienen en promedio por debajo de ~6,16 millones de reproducciones.
 
-Hay 36 canciones que han ocupado el primer lugar (total, tambien se puede discriminar por año)
-```{r}
-tabla <- charts[charts$Position == 1,] 
-top <- unique(tabla$Track_Name)
-length(top)
-print(top)
-```
-Artistas con mas canciones top (hay que reescribir esta query a mongolite) (se puede discriminar por año)
-```{r}
-db.charts.aggregate( [
-    {$match : {Position:1} },
-    {$group: {"_id": {"Artista":"$Artist", "Track":"$Track_Name"}, 
-    "veces_top": {$sum: 1} } },
-    {$sort:{"veces_top":-1} },
-  ] )
-
+```{r fig.height=3, fig.width=4}
+hist(log(streamsxartist$Streams), xlab = "Log(streams)", ylab = "Freq", 
+        main="Cantidad media de reproducciones", breaks=50) 
 ```
 
+Del histograma podemos ver que las medidas de tendencia central tampoco son representativas pero la distribucion es un poco mas simetrica.
+
+```{r fig.height=3, fig.width=4}
+boxplot(streamsxartist$Streams, ylab = "Valores", xlab = "Streams",main="Reproducciones Medias de tracks")
+```
+
+Si consideramos el maximo de reproducciones para cada artista:
+
+```{r}
+streamsxartist_max <- aggregate(Streams ~Artist, data=sub_charts, FUN=max)
+streamsxartist_max <-streamsxartist_max[order(-streamsxartist_max$Streams),]
+streamsxartist_max
+```
+
+Al cambiar a maximo de reproducciones se meten mas artistas nuevos. Varios tambien tienen muchos tracks en las listas, otros se ve que son populares por una cancion (o algunas pocas) que pegaron.
+
+```{r}
+summary(streamsxartist_max)
+```
+
+Para el 50% de artistas su cancion mas escuchada tiene por debajo de ~8,34 millones de reproducciones. El maximo es de ~71,47 millones.
+
+Del histograma podemos ver que las medidas de tendencia central no son representativas, la ditribucion parece ser multimodal y es mas asimetrica que si consideramos las medias:
+
+```{r fig.height=3, fig.width=4}
+hist(log(streamsxartist_max$Streams), xlab = "Log(streams)", ylab = "Freq", 
+        main="Cantidad maxima de reproducciones", breaks=50) 
+```
+
+```{r fig.height=3, fig.width=4}
+boxplot(streamsxartist_max$Streams, ylab = "Valores", xlab = "Streams",main="Reproducciones Maximas de tracks")
+```
+
+- *Canciones top*
+
+Hay 39 canciones que han ocupado el primer lugar (total, tambien se puede discriminar por año):
+
+```{r}
+sub_charts2 <- sub_charts[c(1,2,3,8)]
+tabla_top <- sub_charts2[sub_charts2$Position == 1,] 
+top_tracks <- unique(tabla_top)
+head(top_tracks,5)
+
+```
+por agno:
+
+-2018
+
+```{r}
+sub_charts2 <- sub_charts[c(1,2,3,8)]
+tabla_top_2018 <- sub_charts2[sub_charts2$Position == 1 & sub_charts2$agno==2018,] 
+top_tracks_2018 <- unique(tabla_top_2018)
+head(top_tracks_2018,10)
+```
+
+-2019
+
+```{r}
+sub_charts2 <- sub_charts[c(1,2,3,8)]
+tabla_top_2019 <- sub_charts2[sub_charts2$Position == 1 & sub_charts2$agno==2019,] 
+top_tracks_2019 <- unique(tabla_top_2019)
+head(top_tracks_2019,10)
+
+```
+
+-2020
+
+```{r}
+sub_charts2 <- sub_charts[c(1,2,3,8)]
+tabla_top_2020 <- sub_charts2[sub_charts2$Position == 1 & sub_charts2$agno==2020,] 
+top_tracks_2020 <- unique(tabla_top_2020)
+head(top_tracks_2020,10)
+
+```
+
+-2021
+
+```{r}
+sub_charts2 <- sub_charts[c(1,2,3,8)]
+tabla_top_2021 <- sub_charts2[sub_charts2$Position == 1 & sub_charts2$agno==2021,] 
+top_tracks_2021 <- unique(tabla_top_2021)
+head(top_tracks_2021,10)
+
+```
+
+Se observa que las canciones top cambian a cada agno. Se podria discriminar tambien por temporada.
+
+-*Artistas*
+
+Artistas con mas canciones en el primer lugar:
+
+```{r}
+NumberOnexartist <- aggregate(Track_Name ~ Artist , tabla_top, function(x) length(unique(x)))
+colnames(NumberOnexartist) <- c("Artist","Canciones_Top")
+NumberOnexartist <-NumberOnexartist[order(-NumberOnexartist$Canciones_Top),]
+head(NumberOnexartist,5)
+```
+
+De nuevo repiten varios de los artistas que tienen mas canciones en las listas y con mas reproducciones, pero las canciones que son top para cada artista son unas pocas.
 
 
+Se puede discriminar tambien por agno:
+
+-2018
+```{r}
+NumberOnexartist_2018 <- aggregate(Track_Name ~ Artist , tabla_top_2018, function(x) length(unique(x)))
+colnames(NumberOnexartist_2018) <- c("Artist","Canciones_Top")
+NumberOnexartist_2018 <-NumberOnexartist_2018[order(-NumberOnexartist_2018$Canciones_Top),]
+head(NumberOnexartist_2018,5)
+```
+
+-2019
+```{r}
+NumberOnexartist_2019 <- aggregate(Track_Name ~ Artist , tabla_top_2019, function(x) length(unique(x)))
+colnames(NumberOnexartist_2019) <- c("Artist","Canciones_Top")
+NumberOnexartist_2019 <-NumberOnexartist_2019[order(-NumberOnexartist_2019$Canciones_Top),]
+head(NumberOnexartist_2019,5)
+```
+
+-2020
+```{r}
+NumberOnexartist_2020 <- aggregate(Track_Name ~ Artist , tabla_top_2020, function(x) length(unique(x)))
+colnames(NumberOnexartist_2020) <- c("Artist","Canciones_Top")
+NumberOnexartist_2020 <-NumberOnexartist_2020[order(-NumberOnexartist_2020$Canciones_Top),]
+head(NumberOnexartist_2020,5)
+```
+-2020
+```{r}
+NumberOnexartist_2021 <- aggregate(Track_Name ~ Artist , tabla_top_2021, function(x) length(unique(x)))
+colnames(NumberOnexartist_2021) <- c("Artist","Canciones_Top")
+NumberOnexartist_2021 <-NumberOnexartist_2021[order(-NumberOnexartist_2021$Canciones_Top),]
+head(NumberOnexartist_2021,5)
+```
+
+Durante la cuatentena se volvio mas dificil pegar hits?
+
+-*Features*
+
+```{r}
+# Nombres columnas
+names(artist_audio_features)
+# Tamaño dataframe
+dim(artist_audio_features)
+```
+```{r}
+sub_audio_features <- unique(artist_audio_features)
+dim(sub_audio_features)
+```
+Hay filas 25428 repetidas.
+
+```{r}
+sub_audio_features2 <-sub_audio_features[c(2,15,18,21,26,27,30,31,32,40)]
+sub_audio_features2_max<-apply(sub_audio_features2,2,max)
+sub_audio_features2 <- sub_audio_features2/sub_audio_features2_max
+names(sub_audio_features2)
+```
+31 27
+```{r}
+boxplot(sub_audio_features2,main="Boxplots audio features",las=2)
+```
+
+
+Teniendo la informacion de cuales artistas son los mas populares por numero de tracks en los listados y por tracks numero uno, podemos reducir nuestro analisis de features que hacen que una cancion o artista sea top a estas canciones y artistas.
+
+Antes hay que cruzar la lista de artistas con los del archivo de audio features para que solo esten artistas del archivo de artistas.
