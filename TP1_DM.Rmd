@@ -99,7 +99,7 @@ dim(unique(charts))
 ```
 
 Hay filas que son la misma pero tienen distinto identificador.
-Ahora en cada subconjunto vemos si hay repetidos:
+Ahora en cada subconjunto vemos si hay repetidos sacando la columna del identificador:
 
 ```{r}
 subconjunto_charts0 <- charts[,c(2:8)]
@@ -177,15 +177,18 @@ trackxartist<-trackxartist[order(-trackxartist$Cantidad_tracks),]
 head(trackxartist,5)
 ```
 Post Malone y Billie Eilish tienen mas tracks en los listados en total.
+
 ```{r}
 summary(trackxartist)
 ```
-Del histograma podemos ver que las medidas de tendencia central son representativas:
+Del histograma podemos ver que las medidas de tendencia central no son representativas:
 
 ```{r fig.height=3, fig.width=4}
-hist(trackxartist$Cantidad_tracks, xlab = "Tracks", ylab = "Freq", 
+hist(log(trackxartist$Cantidad_tracks), xlab = "Log(Tracks)", ylab = "Freq", 
         main="Cantidad de tracks por artista",breaks=100) 
 ```
+
+Muchos artistas tienen pocos tracks. Parecce una distro multimodal. 
 
 La dimension de tracks por artista debe ser la cantidad de artistas:
 
@@ -423,24 +426,47 @@ names(artist_audio_features)
 # Tamaño dataframe
 dim(artist_audio_features)
 ```
+Hay missings:
+
+```{r}
+colSums(is.na(artist_audio_features))  
+```
+Son album_release_year y track_preview_ulr. Podemos no considerar esos atributos.
+
+
 ```{r}
 sub_audio_features <- unique(artist_audio_features)
 dim(sub_audio_features)
 ```
-Hay filas 25428 repetidas.
+Hay filas 25428 repetidas. Uso sub_audio_features que las unifica.
+
+Normalizo los atributos para observar los boxplot al tiempo:
 
 ```{r}
-sub_audio_features2 <-sub_audio_features[c(2,15,18,21,26,27,30,31,32,40)]
-sub_audio_features2_max<-apply(sub_audio_features2,2,max)
-sub_audio_features2 <- sub_audio_features2/sub_audio_features2_max
+sub_audio_features2 <-sub_audio_features[c(2,15,17,18,21,26,27,30,31,40)]
+sub_audio_features2_max<-apply(abs(sub_audio_features2),2,max)
+sub_audio_features_p <- mapply(`/`, sub_audio_features2, sub_audio_features2_max)
 names(sub_audio_features2)
 ```
-31 27
 ```{r}
-boxplot(sub_audio_features2,main="Boxplots audio features",las=2)
+boxplot(sub_audio_features_p,main="Boxplots audio features",las=2)
 ```
 
 
 Teniendo la informacion de cuales artistas son los mas populares por numero de tracks en los listados y por tracks numero uno, podemos reducir nuestro analisis de features que hacen que una cancion o artista sea top a estas canciones y artistas.
 
 Antes hay que cruzar la lista de artistas con los del archivo de audio features para que solo esten artistas del archivo de artistas.
+
+Cambiamos el nombre de la columna artist_name en sub_audio_features para poder hacer un join:
+
+```{r}
+ names(sub_audio_features)[names(sub_audio_features)=="artist_name"] <- "Artist" 
+```
+
+Hacemos un semi-join para que solo queden las columnas de sub_audio_features que estan en charts:
+
+```{r}
+audio_features_clean <- semi_join(sub_audio_features, sub_charts , by = "Artist")
+```
+
+Con audio_features_clean y con sub_charts podemos hacer el analisis de 
