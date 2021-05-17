@@ -19,8 +19,13 @@ knitr::opts_chunk$set(echo=FALSE)
 ```{r}
 library(mongolite)
 library(modeest)
+library(ggplot2)
 library(jsonlite)
 library(dplyr)
+library(easyGgplot2)
+library(tidyr)
+library(ggpubr)
+theme_set(theme_pubclean())
 ```
 
 *Carga datasets*
@@ -440,19 +445,6 @@ dim(sub_audio_features)
 ```
 Hay filas 25428 repetidas. Uso sub_audio_features que las unifica.
 
-Normalizo los atributos para observar los boxplot al tiempo:
-
-```{r}
-sub_audio_features2 <-sub_audio_features[c(2,15,17,18,21,26,27,30,31,40)]
-sub_audio_features2_max<-apply(abs(sub_audio_features2),2,max)
-sub_audio_features_p <- mapply(`/`, sub_audio_features2, sub_audio_features2_max)
-names(sub_audio_features2)
-```
-```{r}
-boxplot(sub_audio_features_p,main="Boxplots audio features",las=2)
-```
-
-
 Teniendo la informacion de cuales artistas son los mas populares por numero de tracks en los listados y por tracks numero uno, podemos reducir nuestro analisis de features que hacen que una cancion o artista sea top a estas canciones y artistas.
 
 Antes hay que cruzar la lista de artistas con los del archivo de audio features para que solo esten artistas del archivo de artistas.
@@ -469,4 +461,327 @@ Hacemos un semi-join para que solo queden las columnas de sub_audio_features que
 audio_features_clean <- semi_join(sub_audio_features, sub_charts , by = "Artist")
 ```
 
-Con audio_features_clean y con sub_charts podemos hacer el analisis de 
+Con audio_features_clean y con sub_charts podemos hacer el analisis de los outliers y las correlaciones.
+
+-*Distribuciones*
+
+Histogramas de las variables audio features:
+
+```{r}
+data_features <- audio_features_clean[c(2,15,17,18,21,26,27,30,31,32,40)]
+names(data_features)
+```
+
+```{r }
+# Histograma Urban MPI
+plot1 <- ggplot2.histogram(data_features[,1], title = "Histograma Acousticness", 
+     xtitle = "acousticness", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+# Histograma Rural MPI
+plot2 <- ggplot2.histogram(data_features[,2], main = "Histograma danceability", 
+     xtitle = "danceability", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+# Histograma National MPI
+plot3 <- ggplot2.histogram(data_features[,3], main = "Histograma duration_ms", 
+     xtitle = "duration(ms)", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+# Histograma Regional MPI
+plot4 <-ggplot2.histogram(data_features[,4], main = "Histograma energy", 
+     xtitle = "energy", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot5 <-ggplot2.histogram(data_features[,5], main = "Histograma instrumentalness", 
+     xtitle = "instrumentalness", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot6 <-ggplot2.histogram(data_features[,6], main = "Histograma liveness", 
+     xtitle = "liveness", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot7 <-ggplot2.histogram(data_features[,7], main = "Histograma loudness", 
+     xtitle = "loudness", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot8 <-ggplot2.histogram(data_features[,8], main = "Histograma speechiness", 
+     xtitle = "speechiness", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot9 <-ggplot2.histogram(data_features[,9], main = "Histograma tempo", 
+     xtitle = "tempo", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot10 <-ggplot2.histogram(data_features[,10], main = "Histograma time_signature", 
+     xtitle = "time_signature", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+#
+plot11 <-ggplot2.histogram(data_features[,11], main = "Histograma valence", 
+     xtitle = "valence", ytitle = "Frecuencia", backgroundColor="white", color="black", fill='#FFAAD4')
+
+ggplot2.multiplot(plot1,plot2,plot3,plot4,plot5,plot6,plot7,plot8,plot9,plot10,plot11, cols=3)
+```
+
+De la variable time_signature se puede deducir directamente que la gran mayoria de las canciones en los listados estan compuestas en compases simples 4 tiempos. Para las demas analizamos los boxplots y z_scores.
+
+-*Boxplots*
+
+Normalizo los atributos para observar los boxplot al tiempo:
+
+```{r}
+data_features_max<-apply(abs(data_features),2,max)
+data_features_n <- mapply(`/`, data_features, data_features_max)
+```
+
+```{r}
+box_data <- data_features_n[,c(1:9,11)]
+boxplot(box_data,main="Boxplots audio features normalizadas",las=2)
+```
+Este metodo no seria el adecuado para detectar outliers en la mayoria de los audio features, probablemente solo para acousticness y valence. En tal caso podriamos decir que estas dos variables no poseen outliers notables, pero las vamos a analizar por otros metodos.
+
+-*Z-score*
+
+Analizamos con z-score las distribuciones mas simetricas, que vendrian siendo tempo y valence.
+
+Sacando time signature:
+
+```{r}
+data_features <- audio_features_clean[c(2,15,17,18,21,26,27,30,31,40)]
+names(data_features)
+```
+
+```{r}
+data_tempo_valence <- data_features[c(9,10)]
+means <- apply(data_tempo_valence, 2, mean, na.rm=TRUE)
+desvs <- apply(data_tempo_valence, 2, sd, na.rm = TRUE)
+# tuve que escribirlo explicitamente porque no encontre como escribir elementwise en R
+z_score <- matrix(0, ncol =length(data_tempo_valence) , nrow = nrow(data_tempo_valence)) 
+z_score[,1] <- (data_tempo_valence[,1]-means[1])/desvs[1]
+z_score[,2] <- (data_tempo_valence[,2]-means[2])/desvs[2]
+
+```
+
+Los outliers superiores:
+
+```{r}
+threshold = 3.5
+
+# Los zscores
+var <- z_score[,1]
+L <- var[var>threshold]
+umb_sup_z <- list(L)
+
+var <- z_score[,2]
+L_new = list(var[var>threshold])
+umb_sup_z <- c(umb_sup_z,L_new)
+  
+# los oultiers
+var <- z_score[,1]
+var2 <- data_features[,9]
+L2 <- var2[var>threshold]
+outl_sup_z <- list(L2)
+
+var <- z_score[,2]
+var2 <- data_features[,10]
+L2_new = list(var2[var>threshold])
+outl_sup_z <- c(outl_sup_z,L2_new)
+
+```
+
+Etiqueto los outliers superiores:
+
+```{r}
+data_tempo_valence <- mutate(data_tempo_valence,out_tempo=if_else(data_tempo_valence$tempo %in% outl_sup_z[[1]],1,0))
+data_tempo_valence <- mutate(data_tempo_valence,out_valence=if_else(data_tempo_valence$valence %in% outl_sup_z[[2]],1,0))
+```
+
+Los outliers inferiores:
+
+```{r}
+threshold = -3.5
+
+# Los zscores
+var <- z_score[,1]
+L <- var[var<threshold]
+umb_inf_z <- list(L)
+
+var <- z_score[,2]
+L_new = list(var[var<threshold])
+umb_inf_z <- c(umb_inf_z,L_new)
+  
+# los oultiers
+var <- z_score[,1]
+var2 <- data_features[,9]
+L2 <- var2[var<threshold]
+outl_inf_z <- list(L2)
+
+var <- z_score[,2]
+var2 <- data_features[,10]
+L2_new = list(var2[var<threshold])
+outl_inf_z <- c(outl_inf_z,L2_new)
+
+```
+
+Etiqueto los outliers inferiores:
+
+```{r}
+data_tempo_valence <- mutate(data_tempo_valence,out_tempo_in=if_else(data_tempo_valence$tempo %in% outl_inf_z[[1]],1,0))
+data_tempo_valence <- mutate(data_tempo_valence,out_valence_in=if_else(data_tempo_valence$valence %in% outl_inf_z[[2]],1,0))
+```
+
+```{r}
+#data<- data_tempo_valence %>%
+#  pivot_longer(cols = c("tempo","valence"), names_to = "Var", values_to = "Val")
+
+#ggplot(data, aes(x = Var, y = Val, fill=out_tempo)) +
+#      geom_boxplot()
+```
+
+Aqui se puede observar los outliers calculados con este metodo en color azul:
+
+```{r fig.width=4, fig.height=4 }
+puntos1 <- outl_sup_z[[1]]
+puntos2 <- outl_inf_z[[1]]
+
+boxplot(data_tempo_valence$tempo,main="Boxplot tempo")
+stripchart(puntos1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+stripchart(puntos2, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+```
+Para valence no encuentra outliers. Los datos que tienen tempo 0 es porque seguramente los llenaron con ceros por no tener datos.
+
+-*Z-score modificado*
+
+Para las otras variables de audio features:
+
+```{r}
+names(data_features)
+```
+
+```{r}
+medians <- apply(data_features[,1:8], 2, median, na.rm=T)
+MAD <- apply(data_features[,1:8], 2, mad, na.rm = T)
+# tuve que escribirlo explicitamente porque no encontre como escribir elementwise en R
+z_score_mod <- matrix(0, ncol = length(data_features[,1:8]) , nrow = nrow(data_features[,1:8])) 
+z_score_mod[,1] <- 0.6745*(data_features[,1]-medians[1])/MAD[1]
+z_score_mod[,2] <- 0.6745*(data_features[,2]-medians[2])/MAD[2]
+z_score_mod[,3] <- 0.6745*(data_features[,3]-medians[3])/MAD[3]
+z_score_mod[,4] <- 0.6745*(data_features[,4]-medians[4])/MAD[4]
+z_score_mod[,5] <- 0.6745*(data_features[,5]-medians[5])/MAD[5]
+z_score_mod[,6] <- 0.6745*(data_features[,6]-medians[6])/MAD[6]
+z_score_mod[,7] <- 0.6745*(data_features[,7]-medians[7])/MAD[7]
+z_score_mod[,8] <- 0.6745*(data_features[,8]-medians[8])/MAD[8]
+
+#z_score_mod <- 0.6745*(data_features-medians)/MAD
+```
+
+Definiendo un umbral de 3,5 veces la mediana, calculamos los outliers superiores:
+
+```{r}
+threshold = 3.5
+var <- z_score_mod[,1]
+L <- var[var>threshold]
+umbrales_sup <- list(L)
+
+for (i in c(2:8)){
+  var <- z_score_mod[,i]
+  L_new = list(var[var>threshold])
+  umbrales_sup <- c(umbrales_sup,L_new)
+}
+var <- z_score_mod[,1]
+var2 <- data_features[,1]
+L2 <- var2[var>threshold]
+outliers_sup <- list(L2)
+
+for (i in c(2:8)){
+  var <- z_score_mod[,i]
+  var2 <- data_features[,i]
+  L2_new = list(var2[var>threshold])
+  outliers_sup <- c(outliers_sup,L2_new)
+}
+
+```
+
+Etiqueto los outliers superiores:
+
+```{r}
+data_features <- mutate(data_features,out_acousticness=if_else(data_features[,1] %in% outliers_sup[[1]],1,0))
+data_features <- mutate(data_features,out_danceability=if_else(data_features[,2] %in% outliers_sup[[2]],1,0))
+data_features <- mutate(data_features,out_duration_ms=if_else(data_features[,3] %in% outliers_sup[[3]],1,0))
+data_features <- mutate(data_features,out_energy=if_else(data_features[,4] %in% outliers_sup[[4]],1,0))
+data_features <- mutate(data_features,out_instrumentalness=if_else(data_features[,5] %in% outliers_sup[[1]],1,0))
+data_features <- mutate(data_features,out_liveness=if_else(data_features[,6] %in% outliers_sup[[6]],1,0))
+data_features <- mutate(data_features,out_loudness=if_else(data_features[,7] %in% outliers_sup[[7]],1,0))
+data_features <- mutate(data_features,out_speechiness=if_else(data_features[,8] %in% outliers_sup[[8]],1,0))
+```
+
+Definiendo un umbral de 3,5 veces la mediana, calculamos los outliers inferiores:
+
+```{r}
+threshold = -3.5
+var <- z_score_mod[,1]
+L <- var[var<threshold]
+umbrales_inf <- list(L)
+
+for (i in c(2:8)){
+  var <- z_score_mod[,i]
+  L_new = list(var[var<threshold])
+  umbrales_inf <- c(umbrales_inf,L_new)
+}
+var <- z_score_mod[,1]
+var2 <- data_features[,1]
+L2 <- var2[var<threshold]
+outliers_inf <- list(L2)
+
+for (i in c(2:8)){
+  var <- z_score_mod[,i]
+  var2 <- data_features[,i]
+  L2_new = list(var2[var<threshold])
+  outliers_inf <- c(outliers_inf,L2_new)
+}
+```
+
+Etiqueto los outliers inferiores:
+
+```{r}
+data_features <- mutate(data_features,out_acousticness_in=if_else(data_features[,1] %in% outliers_inf[[1]],1,0))
+data_features <- mutate(data_features,out_danceability_in=if_else(data_features[,2] %in% outliers_inf[[2]],1,0))
+data_features <- mutate(data_features,out_duration_ms_in=if_else(data_features[,3] %in% outliers_inf[[3]],1,0))
+data_features <- mutate(data_features,out_energy_in=if_else(data_features[,4] %in% outliers_inf[[4]],1,0))
+data_features <- mutate(data_features,out_instrumentalness_in=if_else(data_features[,5] %in% outliers_inf[[1]],1,0))
+data_features <- mutate(data_features,out_liveness_in=if_else(data_features[,6] %in% outliers_inf[[6]],1,0))
+data_features <- mutate(data_features,out_loudness_in=if_else(data_features[,7] %in% outliers_inf[[7]],1,0))
+data_features <- mutate(data_features,out_speechiness_in=if_else(data_features[,8] %in% outliers_inf[[8]],1,0))
+```
+
+Los outliers correspondientes en color azul:
+
+```{r }
+puntos1<-list()
+puntos1[[1]] <- unique(outliers_sup[[3]])
+puntos1[[2]] <- unique(outliers_sup[[5]])
+puntos1[[3]] <- unique(outliers_sup[[6]])
+puntos1[[4]] <- unique(outliers_sup[[8]])
+
+puntos2<-list()
+puntos2[[1]] <- unique(outliers_inf[[7]])
+
+par(mfrow=c(2,4))
+
+boxplot(data_features[,1],main=colnames(data_features)[1])
+
+boxplot(data_features[,2],main=colnames(data_features)[2])
+
+boxplot(data_features[,3],main=colnames(data_features)[3])
+data1<-puntos1[[1]]
+stripchart(data1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(data_features[,4],main=colnames(data_features)[4])
+
+boxplot(data_features[,5],main=colnames(data_features)[5])
+data1<-puntos1[[2]]
+stripchart(data1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(data_features[,6],main=colnames(data_features)[6])
+data1<-puntos1[[3]]
+stripchart(data1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(data_features[,7],main=colnames(data_features)[7])
+data1<-puntos2[[1]]
+stripchart(data1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(data_features[,8],main=colnames(data_features)[8])
+data1<-puntos1[[4]]
+stripchart(data1, vertical = TRUE, method = "jitter", add = TRUE, pch = 20, col = 'blue')
+```
+Como se puede observar el metodo marca muchos puntos como outliers, esto es porque las distribuciones son muy asimetricas, por tanto debemos explorar otros metodos.
+
+Calculamos el z-score para streams, streamsxartista, trackxartista, numberonexartista.
+Nota: calcular mas arriba streamsxtrack para los track top.
